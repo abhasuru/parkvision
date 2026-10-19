@@ -1,0 +1,15 @@
+# Python environment (each person recreates their own)
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+
+# PKLot dataset (too big for GitHub; download link goes in the README)
+train/
+valid/
+test/
+README.dataset.txt
+README.roboflow.txt
+
+# Trained model files (large)
+*.pt
+*.pth
