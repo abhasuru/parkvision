@@ -10,6 +10,9 @@ test/
 README.dataset.txt
 README.roboflow.txt
 
+# Generated patches (rebuild them by running notebook 02)
+patches/
+
 # Trained model files (large)
 *.pt
 *.pth
