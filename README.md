@@ -65,7 +65,7 @@ Training takes about a minute on an RTX 5070. The model and cropping code live i
 ## Next steps
 
 - Compare against a pretrained model (ResNet18) to see if it shrinks the 5-point gap between lots
-- An interactive web demo
+- Put the web demo online (Hugging Face Spaces) so anyone can try it in a browser
 - Test on photos of a real NC State parking lot
 
 ## Run it yourself
@@ -81,6 +81,16 @@ python -m venv .venv
 Download the dataset from [Roboflow (PKLot, "raw" version, COCO format)](https://universe.roboflow.com/brad-dwyer/pklot-1tros/dataset/1) and unzip it
 into the project folder (you should get `train/`, `valid/` and `test/`). Then run the notebooks in order.
 The trained model (`small_cnn_best.pt`) is included, so you can skip straight to notebook 04.
+
+## Web demo
+
+[`app.py`](app.py) is a small web app: pick an example photo (or upload a new photo from one of the three cameras) and it marks every space and counts the free ones.
+
+```bash
+.venv\Scripts\python app.py
+```
+
+Then open the link it prints (usually http://127.0.0.1:7860). The space positions for each camera are stored in [`layouts.json`](layouts.json), since each camera always looks at the same spaces.
 
 ## Data and credit
 
