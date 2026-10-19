@@ -2,6 +2,8 @@
 
 **Detecting empty and occupied parking spaces from a single camera image, and testing whether it works on a parking lot the model has never seen.**
 
+### [▶ Try the live demo](https://abhasuru.github.io/parkvision/) (runs in your browser, nothing to install)
+
 ![Model predictions on an unseen parking lot](images/demo_pucpr.png)
 *The model running on PUCPR, a lot it never saw during training. Green = predicted empty, red = predicted occupied. (This photo was picked by a fixed rule, "the photo closest to 2 PM on the busiest day," not because it scored well. The full-day chart below shows the typical error.)*
 
@@ -65,7 +67,6 @@ Training takes about a minute on an RTX 5070. The model and cropping code live i
 ## Next steps
 
 - Compare against a pretrained model (ResNet18) to see if it shrinks the 5-point gap between lots
-- Put the web demo online (Hugging Face Spaces) so anyone can try it in a browser
 - Test on photos of a real NC State parking lot
 
 ## Run it yourself
@@ -90,7 +91,7 @@ The trained model (`small_cnn_best.pt`) is included, so you can skip straight to
 .venv\Scripts\python app.py
 ```
 
-Then open the link it prints (usually http://127.0.0.1:7860). The space positions for each camera are stored in [`layouts.json`](layouts.json), since each camera always looks at the same spaces.
+Then open the link it prints (usually http://127.0.0.1:7860). The [live demo](https://abhasuru.github.io/parkvision/) is a separate static page in [`docs/`](docs/): the same model exported to ONNX and run in the browser with ONNX Runtime Web, so it needs no server. The space positions for each camera are stored in [`layouts.json`](layouts.json), since each camera always looks at the same spaces.
 
 ## Data and credit
 

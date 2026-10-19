@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ParkVision</title>
+<meta name="description" content="Find free parking spaces from a camera image. A small CNN running entirely in your browser.">
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #ffffff; --text: #1b1f24; --muted: #5b6573; --border: #dde1e6;
+    --accent: #1f6feb; --free: #16a34a; --taken: #dc2626; --warn: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216; --surface: #171b21; --text: #e6e9ee; --muted: #9aa4b2; --border: #2a3039;
+      --accent: #58a6ff; --free: #4ade80; --taken: #f87171; --warn: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 1.9rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .lede { color: var(--muted); margin: 0 0 24px; max-width: 70ch; }
+  .lede strong { color: var(--text); }
+  a { color: var(--accent); }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .label { font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  .examples { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .example { border: 2px solid transparent; border-radius: 8px; padding: 0; background: none; cursor: pointer; text-align: left; color: var(--text); }
+  .example img { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: 6px; display: block; }
+  .example span { display: block; font-size: .78rem; padding: 4px 2px 0; color: var(--muted); }
+  .example.active { border-color: var(--accent); }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 14px; font-size: .9rem; color: var(--muted); }
+  select, input[type=file] { font: inherit; color: var(--text); }
+  select { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+  .result { margin-top: 16px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; margin-bottom: 12px; }
+  .big { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .big .of { font-size: 1rem; font-weight: 500; color: var(--muted); }
+  .note { font-size: .9rem; color: var(--muted); }
+  .note.unseen { color: var(--free); font-weight: 600; }
+  canvas { width: 100%; height: auto; border-radius: 8px; display: block; background: var(--border); }
+  .legend { display: flex; gap: 16px; font-size: .85rem; color: var(--muted); margin-top: 8px; }
+  .swatch { display: inline-block; width: 12px; height: 12px; border: 3px solid; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+  .status { font-size: .9rem; color: var(--muted); min-height: 1.5em; }
+  .status.error { color: var(--warn); }
+  footer { margin-top: 28px; font-size: .85rem; color: var(--muted); }
+  @media (max-width: 640px) {
+    .examples { grid-template-columns: repeat(3, 1fr); }
+    h1 { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>ParkVision</h1>
+  <p class="lede">Find free parking spaces from a single camera image. A small CNN classifies every space as empty or occupied,
+    <strong>running entirely in your browser</strong>. It was trained on one parking lot (UFPR) and scores
+    <strong>94.1%</strong> on a lot it never saw (PUCPR).
+    <a href="https://github.com/abhasuru/parkvision">Code and write-up on GitHub →</a></p>
+
+  <section class="panel">
+    <p class="label">Pick a photo</p>
+    <div class="examples" id="examples"></div>
+    <div class="controls">
+      <label>Or upload a 1280×720 photo from one of these cameras: <input type="file" id="upload" accept="image/*"></label>
+      <label>Camera: <select id="camera"><option>PUCPR</option><option>UFPR04</option><option>UFPR05</option></select></label>
+    </div>
+  </section>
+
+  <section class="panel result">
+    <div class="stats">
+      <div class="big" id="free">–</div>
+      <div class="note" id="note"></div>
+    </div>
+    <canvas id="canvas" width="1280" height="720" aria-label="Parking lot with predicted free and occupied spaces"></canvas>
+    <div class="legend">
+      <span><span class="swatch" style="border-color: var(--free)"></span>Predicted empty</span>
+      <span><span class="swatch" style="border-color: var(--taken)"></span>Predicted occupied</span>
+    </div>
+    <p class="status" id="status">Loading model…</p>
+  </section>
+
+  <footer>Data: PKLot (Almeida et al., 2015, CC BY 4.0). Model: 3-layer CNN, about 94,000 parameters, exported to ONNX.</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script>
+const EXAMPLES = [
+  { file: "examples/pucpr_morning.jpg",   camera: "PUCPR",  name: "PUCPR · 8 AM" },
+  { file: "examples/pucpr_afternoon.jpg", camera: "PUCPR",  name: "PUCPR · 2 PM" },
+  { file: "examples/pucpr_evening.jpg",   camera: "PUCPR",  name: "PUCPR · 5 PM" },
+  { file: "examples/ufpr04.jpg",          camera: "UFPR04", name: "UFPR04" },
+  { file: "examples/ufpr05.jpg",          camera: "UFPR05", name: "UFPR05" },
+];
+const NOTES = {
+  PUCPR: "PUCPR is a lot the model never saw during training, so this is the honest test.",
+  UFPR04: "UFPR04 is one of the cameras the model was trained on.",
+  UFPR05: "UFPR05 is one of the cameras the model was trained on.",
+};
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const statusEl = document.getElementById("status");
+const cameraEl = document.getElementById("camera");
+let session, layouts, currentImage;
+
+function setStatus(text, isError = false) { statusEl.textContent = text; statusEl.classList.toggle("error", isError); }
+
+// Same preprocessing as training: crop each box, resize to 64x64, scale pixels to -1..1, channels first.
+function toTensor(image, boxes) {
+  const size = 64;
+  const patch = document.createElement("canvas");
+  patch.width = patch.height = size;
+  const pctx = patch.getContext("2d", { willReadFrequently: true });
+  pctx.imageSmoothingQuality = "high";
+  const data = new Float32Array(boxes.length * 3 * size * size);
+  boxes.forEach(([x, y, w, h], i) => {
+    pctx.drawImage(image, x, y, w, h, 0, 0, size, size);
+    const px = pctx.getImageData(0, 0, size, size).data;
+    const base = i * 3 * size * size;
+    for (let p = 0; p < size * size; p++) {
+      for (let c = 0; c < 3; c++) {
+        data[base + c * size * size + p] = (px[p * 4 + c] / 255 - 0.5) / 0.5;
+      }
+    }
+  });
+  return new ort.Tensor("float32", data, [boxes.length, 3, size, size]);
+}
+
+async function analyze() {
+  if (!session || !currentImage) return;
+  const camera = cameraEl.value;
+  if (currentImage.naturalWidth !== 1280 || currentImage.naturalHeight !== 720) {
+    setStatus("This demo only works on 1280×720 photos from the three PKLot cameras, because it needs to know where each space is.", true);
+    return;
+  }
+  const boxes = layouts[camera];
+  const t0 = performance.now();
+  const output = await session.run({ patches: toTensor(currentImage, boxes) });
+  const scores = output.scores.data;
+  const ms = Math.round(performance.now() - t0);
+
+  ctx.drawImage(currentImage, 0, 0, 1280, 720);
+  let free = 0;
+  boxes.forEach(([x, y, w, h], i) => {
+    const empty = scores[i * 2] > scores[i * 2 + 1];
+    if (empty) free++;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = empty ? "#22c55e" : "#ef4444";
+    ctx.strokeRect(x, y, w, h);
+  });
+  document.getElementById("free").innerHTML = `${free} <span class="of">of ${boxes.length} spaces free</span>`;
+  const note = document.getElementById("note");
+  note.textContent = NOTES[camera];
+  note.classList.toggle("unseen", camera === "PUCPR");
+  setStatus(`Classified ${boxes.length} spaces in ${ms} ms, right here in your browser.`);
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function selectExample(example, button) {
+  document.querySelectorAll(".example").forEach(b => b.classList.remove("active"));
+  button.classList.add("active");
+  cameraEl.value = example.camera;
+  currentImage = await loadImage(example.file);
+  analyze();
+}
+
+const examplesEl = document.getElementById("examples");
+EXAMPLES.forEach((example, i) => {
+  const button = document.createElement("button");
+  button.className = "example";
+  button.innerHTML = `<img src="${example.file}" alt="${example.name}"><span>${example.name}</span>`;
+  button.onclick = () => selectExample(example, button);
+  examplesEl.appendChild(button);
+});
+
+document.getElementById("upload").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.querySelectorAll(".example").forEach(b => b.classList.remove("active"));
+  currentImage = await loadImage(URL.createObjectURL(file));
+  analyze();
+};
+cameraEl.onchange = analyze;
+
+(async () => {
+  try {
+    ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
+    [session, layouts] = await Promise.all([
+      ort.InferenceSession.create("model.onnx"),
+      fetch("layouts.json").then(r => r.json()),
+    ]);
+    setStatus("Model loaded.");
+    selectExample(EXAMPLES[1], examplesEl.children[1]);
+  } catch (err) {
+    setStatus("Couldn't load the model: " + err.message, true);
+  }
+})();
+</script>
+</body>
+</html>
