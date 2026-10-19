@@ -16,3 +16,5 @@ patches/
 # Trained model files (large)
 *.pt
 *.pth
+# ...except the final small model (under 1 MB), so others can run the demo without retraining
+!small_cnn_best.pt
